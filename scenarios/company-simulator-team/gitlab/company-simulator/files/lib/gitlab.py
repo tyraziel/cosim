@@ -54,3 +54,4 @@ def generate_commit_id(message: str, author: str, timestamp: float) -> str:
     """Generate a short hex commit ID from message, author, and timestamp."""
     raw = f"{message}:{author}:{timestamp}"
     return hashlib.sha1(raw.encode()).hexdigest()[:8]
+

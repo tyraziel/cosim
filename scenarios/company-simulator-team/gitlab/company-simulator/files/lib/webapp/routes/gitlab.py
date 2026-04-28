@@ -4,12 +4,13 @@ import io
 import json
 import tarfile
 import time
-
 from flask import Blueprint, jsonify, request, send_file
 
 from lib.gitlab import GITLAB_DIR, generate_commit_id, save_repos_index
 from lib.webapp.helpers import _broadcast_gitlab_event
 from lib.webapp.state import _gitlab_commits, _gitlab_lock, _gitlab_repos
+
+
 
 bp = Blueprint("gitlab", __name__)
 
@@ -182,3 +183,4 @@ def gitlab_log(project):
     # Return newest first
     commits.reverse()
     return jsonify(commits)
+

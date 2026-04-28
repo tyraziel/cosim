@@ -185,19 +185,13 @@ MCP_TOOL_NAMES = [
     "list_docs",
     "delete_doc",
     "append_doc",
-    # GitLab (12)
+    # GitLab (6)
     "list_repos",
     "create_repo",
     "commit_files",
     "read_file",
     "list_repo_tree",
     "get_repo_log",
-    "create_merge_request",
-    "list_merge_requests",
-    "get_merge_request",
-    "comment_on_merge_request",
-    "approve_merge_request",
-    "merge_merge_request",
     # Tickets (5)
     "get_ticket",
     "create_ticket",
@@ -564,7 +558,8 @@ class ContainerPool:
             "--allowedTools",
             self._allowed_tools_str,
             "--output-format",
-            "json",
+            "stream-json",
+            "--verbose",
             "--model",
             self._model_id,
             "--max-turns",
@@ -630,19 +625,55 @@ class ContainerPool:
             response_text = ""
             thinking_text = ""
             if stdout_text.strip():
-                try:
-                    output = json.loads(stdout_text.strip())
-                    response_text = output.get("result", stdout_text.strip())
-                    # Extract thinking from Claude Code's JSON output if present
-                    thinking_text = output.get("thinking", "")
-                    # Also check usage for any internal monologue
-                    if not thinking_text:
-                        # Claude Code may embed thinking in the content blocks
-                        for block in output.get("content", []):
-                            if isinstance(block, dict) and block.get("type") == "thinking":
-                                thinking_text += block.get("thinking", "") + "\n"
-                except (json.JSONDecodeError, ValueError):
-                    response_text = stdout_text.strip()
+                # Parse stream-json output: one JSON object per line
+                thinking_parts = []
+                for line in stdout_text.strip().split("\n"):
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        obj = json.loads(line)
+                    except (json.JSONDecodeError, ValueError):
+                        continue
+                    obj_type = obj.get("type", "")
+                    if obj_type == "result":
+                        response_text = obj.get("result", "")
+                    elif obj_type == "assistant":
+                        # Extract thinking blocks from assistant messages
+                        msg = obj.get("message", {})
+                        for block in msg.get("content", []):
+                            if isinstance(block, dict):
+                                if block.get("type") == "thinking" and block.get("thinking"):
+                                    thinking_parts.append(block["thinking"])
+                thinking_text = "\n\n".join(thinking_parts)
+                # Append turn summary from the result object
+                for line in stdout_text.strip().split("\n"):
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        obj = json.loads(line)
+                    except (json.JSONDecodeError, ValueError):
+                        continue
+                    if obj.get("type") == "result":
+                        num_turns = obj.get("num_turns", 0)
+                        cost = obj.get("total_cost_usd", 0)
+                        usage = obj.get("usage", {})
+                        out_tokens = usage.get("output_tokens", 0)
+                        summary_parts = []
+                        if num_turns:
+                            summary_parts.append(f"{num_turns} tool call(s)")
+                        if out_tokens:
+                            summary_parts.append(f"{out_tokens} output tokens")
+                        if cost:
+                            summary_parts.append(f"${cost:.4f}")
+                        if summary_parts:
+                            thinking_text = (
+                                (thinking_text + "\n\n---\n" + ", ".join(summary_parts))
+                                if thinking_text
+                                else ", ".join(summary_parts)
+                            )
+                        break
 
             if not success:
                 print(f"  {display_name}: exec exited with code {exit_code} ({format_duration(elapsed)})")

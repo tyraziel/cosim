@@ -511,25 +511,25 @@ Based on `agent_runner.py`, here's what's involved:
 - ~~Subsystem architecture doc~~ — docs/subsystem-architecture.md (updated for v3)
 - ~~MUD dev team scenario~~ — "Realm of the Forgotten Crown" with seeded codebase, 6 characters, easter egg quest
 - ~~v3 architecture~~ — container orchestrator, MCP server, webapp Blueprint refactor (T4NN3R)
+- ~~MIT License~~ — added with AI-generated work disclosure
+- ~~README rewrite~~ — updated for v3 architecture with token spend warning (T4NN3R)
+- ~~Logo~~ — added (T4NN3R)
+- ~~CI and linting~~ — GitHub Actions with ruff + pytest (T4NN3R)
+- ~~Test suite~~ — 94 tests for pure-logic modules + 11 MR tests (T4NN3R + 1.z3r0)
+- ~~Legacy character file cleanup~~ — removed 48 old .md files replaced by .CS.md
+- ~~Makefile~~ — server, mcp-server, chat, cosim, cosim-kill, build-image, check, status, seed targets
+- ~~GitLab merge requests~~ — MR subsystem with unified diffs, approval workflow, state machine, 6 MCP tools
+- ~~Notification system~~ — toast auto-dismiss with progress bar, stacking, The Loaf (Starchy Version) notification history
+- ~~GCE metadata timeout fix~~ — GCE_METADATA_HOST=127.0.0.1 prevents 5-min auth delay in containers
+- ~~Agent thinking capture~~ — stream-json output parsing with cost-colored stats in NPC sidebar
 
 ## Priority / Sequencing
 
-### Project Housekeeping (Do First)
+### Project Housekeeping
 
-1. **License** — choose and add a license file (MIT? Apache 2.0? AGPL?)
-2. **README rewrite** — update for COSIM branding, v3 architecture (three-process model, MCP, containers), setup instructions, token spend warning
-3. **Token spend warning** — prominent WARNING in README and startup output: "COSIM consumes a significant amount of LLM tokens. Expect hundreds of dollars in spend within minutes of running a full scenario. Monitor your usage."
-4. **COSIM branding** — rename/rebrand to COSIM (Company Organization Simulator). Update README, docs, UI title, package metadata
-5. **Logo** — design a COSIM logo for README, UI header, and docs
-6. **Cleanup stale files** — remove `docs.agentic-sdlc/`, `gitlab.bak/`, old `.md` character files (replaced by `.CS.md`), any other committed runtime artifacts. Add to `.gitignore`
-7. **Wrapper script** — `./cosim` or `./run.sh` that starts all three processes (Flask server, MCP server, container orchestrator) with sensible defaults
-8. **Skills cleanup** — audit `.claude/skills/` directory, remove unused or outdated skill definitions
-
-### CI / Quality
-
-9. **CI and linting** — set up GitHub Actions with ruff (lint + format), pytest, and syntax checks. Gate PRs on passing checks
-10. **Test suite (pytest)** — unit and integration tests for scenario loading, session save/load, API endpoints, state modules (memos, blog, email, events), personas prompt extraction
-11. **Dependabot** — enable for Python dependencies (pyproject.toml) and GitHub Actions
+1. **COSIM branding** — finish rename/rebrand to COSIM (Company Organization Simulator). Update docs, UI title, package metadata (partially done)
+2. **Skills cleanup** — audit `.claude/skills/` directory, remove unused or outdated skill definitions
+3. **Dependabot** — enable for Python dependencies (pyproject.toml) and GitHub Actions
 
 ### Features
 
@@ -537,12 +537,53 @@ Based on `agent_runner.py`, here's what's involved:
 13. **Madden Mode (Telestrator)** — a drawing/annotation overlay for the Scenario Director. Canvas layer over the UI where you can circle messages, draw arrows showing cause and effect, sketch plans, annotate agent behavior in real-time
 14. **Whiteboard** — shared visual collaboration subsystem for agents. Options: (a) sticky notes / card board where agents post ideas to columns (Miro/FigJam lite), (b) diagram-as-code with Mermaid/ASCII rendering, (c) collaborative scratchpad/markdown workspace
 15. **Auto-firing events** — random/timed event triggering at intervals. Cascading follow-up events
+16. **Company Meetings** — new subsystem for structured all-hands / town halls / standups with Scenario Director control.
+
+    **Concept:**
+    - A meeting has a title, presenter, and an ordered list of agenda items
+    - Two modes: **Presentation** (one-way broadcast, agents react in backchannels) and **Q&A** (agents can post questions to the meeting, presenter responds)
+    - Scenario Director manually advances to the next agenda item — watches backchannel reactions and progresses when ready
+    - Agents see the current meeting item in their turn prompt and react in their normal channels (like real employees during an all-hands)
+    - Q&A mode: agents decide whether their question is worth asking publicly or keeping to their backchannel
+
+    **Three creation paths:**
+    - **Scenario-seeded** — meetings defined in `scenario.yaml` with title, presenter, agenda items, Q&A flags per item. Ready to launch when scenario starts
+    - **Event-triggered** — `"meeting"` event action type creates and optionally starts a meeting ("CEO calls emergency all-hands")
+    - **UI-created** — "Create Meeting" from the Meeting tab for ad-hoc meetings
+
+    **UI:**
+    - Meeting tab with agenda sidebar (items with checkmarks for completed)
+    - Main area shows current item being presented + backchannel activity summary
+    - "Next Item" / "Open Q&A" / "Close Q&A" / "End Meeting" controls for Scenario Director
+    - Meeting history (past meetings with transcripts)
+
+    **Data model:**
+    ```yaml
+    meeting:
+      title: "Q3 All-Hands"
+      presenter: "Dana (CEO)"
+      status: not_started  # not_started / in_progress / concluded
+      current_item: 0
+      items:
+        - text: "Welcome. Q2 was our best quarter — 40% revenue growth."
+          qa_enabled: false
+        - text: "Announcing pivot to enterprise. Going upmarket."
+          qa_enabled: true
+        - text: "Engineering: SOC2 compliance needed by end of Q4."
+          qa_enabled: true
+        - text: "Good news: 15% bonuses for everyone."
+          qa_enabled: false
+        - text: "Open floor for questions."
+          qa_enabled: true
+    ```
+
+    Follows standard subsystem architecture (see docs/subsystem-architecture.md)
 
 ### Enhancements
 
-- **Notification audit** — (1) audit all CRUD operations for missing `showNotice()` coverage. (2) Add auto-dismiss cooldown timer (3-5 seconds). Stack multiple notifications
 - **Theme audit** — audit all buttons, badges, and inline styles for CSS variable coverage. Semantic colors stay hardcoded
 - **Character template metadata** — templates should auto-fill the entire hire form (role, tier, channels, folders), not just the prompt
+- **Notification coverage audit** — audit all CRUD operations for missing `showNotice()` calls. The toast system works, but some actions may not trigger notifications
 
 ### Architecture
 

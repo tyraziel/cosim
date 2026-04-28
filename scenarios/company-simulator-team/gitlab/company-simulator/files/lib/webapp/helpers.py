@@ -362,8 +362,8 @@ def _init_gitlab():
         _gitlab_commits.clear()
         index = load_repos_index()
         _gitlab_repos.update(index)
-        # Load commit logs for each repo
         for repo_name in index:
+            # Load commit logs
             commits_path = GITLAB_DIR / repo_name / "_commits.json"
             if commits_path.exists():
                 try:
@@ -372,6 +372,7 @@ def _init_gitlab():
                     _gitlab_commits[repo_name] = []
             else:
                 _gitlab_commits[repo_name] = []
+
 
 
 def _init_tickets():

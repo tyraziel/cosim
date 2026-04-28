@@ -4,7 +4,7 @@ PYTHON := $(VENV)/bin/python
 PYTEST := $(VENV)/bin/pytest
 RUFF := $(VENV)/bin/ruff
 
-SCENARIO ?= tech-startup
+SCENARIO ?= company-simulator-team
 MODEL ?= sonnet
 PORT ?= 5000
 MCP_PORT ?= 5001
@@ -12,7 +12,7 @@ IMAGE ?= agent-image:latest
 
 .PHONY: help venv install test lint lint-fix clean \
         server mcp-server chat build-image \
-        check status logs stop really-clean
+        check status logs stop really-clean seed cosim cosim-kill
 
 # -- Help --
 
@@ -44,7 +44,17 @@ clean: ## Remove venv and caches
 
 # -- Running COSIM --
 
-server: install ## Start Flask server (Terminal 1)
+cosim: install ## Start all three processes (Flask + MCP + orchestrator)
+	@trap 'kill 0' EXIT; \
+	$(PYTHON) main.py server --port $(PORT) --host 127.0.0.1 --scenario $(SCENARIO) & \
+	sleep 2; \
+	$(PYTHON) main.py mcp-server --port $(MCP_PORT) --scenario $(SCENARIO) & \
+	sleep 2; \
+	$(PYTHON) main.py chat --model $(MODEL) --scenario $(SCENARIO) \
+		--mcp-port $(MCP_PORT) --server-url http://127.0.0.1:$(PORT) & \
+	wait
+
+server: install ## Start Flask server only
 	$(PYTHON) main.py server --port $(PORT) --host 127.0.0.1 --scenario $(SCENARIO)
 
 mcp-server: install ## Start MCP server (Terminal 2)
@@ -82,6 +92,41 @@ logs: ## Tail agent logs
 stop: ## Stop all agent containers
 	@podman ps --filter "name=agent-" --format "{{.Names}}" 2>/dev/null | xargs -r podman stop
 	@echo "All agent containers stopped"
+
+SEED_DIR := scenarios/company-simulator-team/gitlab/company-simulator/files
+
+seed: ## Sync current codebase into company-simulator-team seeded gitlab
+	@echo "Syncing to $(SEED_DIR) ..."
+	@rsync -a --delete \
+		--exclude='__pycache__/' \
+		--exclude='.pytest_cache/' \
+		--exclude='*.pyc' \
+		--exclude='.env' \
+		--exclude='.venv/' \
+		--exclude='var/' \
+		--exclude='*.egg-info/' \
+		--exclude='.git/' \
+		--exclude='.claude/' \
+		--exclude='.github/' \
+		--exclude='scenarios/company-simulator-team/gitlab/' \
+		--exclude='scenarios/dnd-campaign/' \
+		--exclude='scenarios/mud-dev-team/' \
+		--exclude='scenarios/character-templates/' \
+		--exclude='backups/' \
+		--exclude='docs.agentic-sdlc/' \
+		--exclude='gitlab.bak/' \
+		--exclude='application_default_credentials.json' \
+		--exclude='uv.lock' \
+		./ $(SEED_DIR)/
+	@echo "Done — seeded gitlab updated"
+
+cosim-kill: ## Kill all COSIM processes and agent containers
+	@echo "Stopping agent containers..."
+	@podman ps --filter "name=agent-" --format "{{.Names}}" 2>/dev/null | xargs -r podman stop 2>/dev/null
+	@echo "Killing COSIM processes..."
+	@lsof -ti :$(PORT) 2>/dev/null | xargs -r kill 2>/dev/null; true
+	@lsof -ti :$(MCP_PORT) 2>/dev/null | xargs -r kill 2>/dev/null; true
+	@echo "Done"
 
 really-clean: ## Stop containers and clear all runtime state (DESTRUCTIVE)
 	@echo "Stopping containers..."
