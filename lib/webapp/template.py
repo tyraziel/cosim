@@ -1249,6 +1249,30 @@ WEB_UI = """<!DOCTYPE html>
           </div>
         </div>
 
+        <!-- The Loaf — Notification History -->
+        <div style="margin-bottom:32px">
+          <div style="font-size:12px;font-weight:600;color:var(--text);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px">The Loaf, Starchy Version <span style="font-size:10px;color:var(--text-dimmer);text-transform:none;letter-spacing:0">Notification History</span></div>
+          <p style="font-size:12px;color:var(--text-dim);margin-bottom:12px">All toast notifications from this session. Useful for reviewing messages that disappeared too quickly.</p>
+          <div style="display:flex;gap:8px;margin-bottom:10px">
+            <button id="loaf-refresh-btn" class="session-btn" style="font-size:11px">Refresh</button>
+            <button id="loaf-clear-btn" class="session-btn" style="font-size:11px;border-color:var(--accent);color:var(--accent)">Clear Log</button>
+            <span id="loaf-count" style="font-size:11px;color:var(--text-dimmer);align-self:center;margin-left:auto"></span>
+          </div>
+          <div id="loaf-table-wrap" style="overflow-x:auto;max-height:300px;overflow-y:auto;border:1px solid var(--border-dark);border-radius:6px">
+            <table style="width:100%;border-collapse:collapse;font-size:12px">
+              <thead>
+                <tr style="border-bottom:1px solid var(--border-dark);position:sticky;top:0;background:var(--panel)">
+                  <th style="padding:6px 10px;color:var(--text-dim);font-weight:600;font-size:10px;text-transform:uppercase;text-align:left;width:80px">Time</th>
+                  <th style="padding:6px 10px;color:var(--text-dim);font-weight:600;font-size:10px;text-transform:uppercase;text-align:left">Message</th>
+                </tr>
+              </thead>
+              <tbody id="loaf-body">
+                <tr><td colspan="2" style="padding:12px 10px;color:var(--text-dimmer);text-align:center">No notifications yet</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
         <!-- Danger Zone -->
         <div style="margin-bottom:24px">
           <div style="font-size:12px;font-weight:600;color:var(--accent);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px">Danger Zone</div>
@@ -1777,7 +1801,7 @@ document.querySelectorAll('.header-tab').forEach(tab => {
     if (target === 'blog') loadBlogPosts();
     if (target === 'recap') renderRecapList();
     if (target === 'usage') loadUsage();
-    if (target === 'advanced') loadSessionManagerTable();
+    if (target === 'advanced') { loadSessionManagerTable(); renderLoaf(); }
   });
 });
 
@@ -4065,6 +4089,32 @@ async function loadUsage() {
 
 // -- Advanced tab --
 
+function renderLoaf() {
+  const body = document.getElementById('loaf-body');
+  const count = document.getElementById('loaf-count');
+  if (!_noticeLog.length) {
+    body.innerHTML = '<tr><td colspan="2" style="padding:12px 10px;color:var(--text-dimmer);text-align:center">No notifications yet</td></tr>';
+    count.textContent = '';
+    return;
+  }
+  count.textContent = _noticeLog.length + ' notification' + (_noticeLog.length !== 1 ? 's' : '');
+  let html = '';
+  [..._noticeLog].reverse().forEach(function(n) {
+    const ts = new Date(n.timestamp);
+    const timeStr = ts.toLocaleTimeString();
+    html += '<tr style="border-bottom:1px solid var(--border-dark)">';
+    html += '<td style="padding:5px 10px;color:var(--text-dimmer);white-space:nowrap;font-family:monospace;font-size:11px">' + timeStr + '</td>';
+    html += '<td style="padding:5px 10px;color:var(--text)">' + escapeHtml(n.text) + '</td>';
+    html += '</tr>';
+  });
+  body.innerHTML = html;
+}
+document.getElementById('loaf-refresh-btn').addEventListener('click', renderLoaf);
+document.getElementById('loaf-clear-btn').addEventListener('click', () => {
+  _noticeLog = [];
+  renderLoaf();
+});
+
 document.getElementById('clear-chat-btn').addEventListener('click', async () => {
   if (!confirm('Clear all chat messages? This cannot be undone.')) return;
   await fetch('/api/messages/clear', {method: 'POST'});
@@ -5096,22 +5146,48 @@ function hideLoading() {
 function openModal(id) { document.getElementById(id).classList.add('open'); }
 function closeModal(id) { document.getElementById(id).classList.remove('open'); }
 
-function showNotice(text) {
-  // Show a non-blocking notice bar at the top of the page
-  let bar = document.getElementById('notice-bar');
-  if (!bar) {
-    bar = document.createElement('div');
-    bar.id = 'notice-bar';
-    bar.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:999;background:var(--accent);color:var(--text-bright);padding:10px 20px;font-size:13px;display:flex;align-items:center;justify-content:space-between;';
-    const dismiss = document.createElement('button');
-    dismiss.textContent = 'Dismiss';
-    dismiss.style.cssText = 'background:rgba(0,0,0,0.3);color:var(--text-bright);border:none;padding:4px 12px;border-radius:4px;cursor:pointer;font-size:12px;margin-left:16px;';
-    dismiss.addEventListener('click', () => bar.remove());
-    bar.appendChild(document.createElement('span'));
-    bar.appendChild(dismiss);
-    document.body.prepend(bar);
-  }
-  bar.querySelector('span').textContent = text;
+let _noticeStack = [];
+let _noticeLog = [];
+function _reflowNotices() {
+  let offset = 0;
+  _noticeStack.forEach(bar => { bar.style.top = offset + 'px'; offset += bar.offsetHeight; });
+}
+function showNotice(text, duration) {
+  duration = duration || 5000;
+  _noticeLog.push({text: text, timestamp: Date.now()});
+  const bar = document.createElement('div');
+  bar.className = 'notice-toast';
+  bar.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:999;background:var(--accent);color:var(--text-bright);padding:10px 20px;font-size:13px;display:flex;align-items:center;justify-content:space-between;transform:translateY(-100%);transition:transform 0.2s ease, top 0.2s ease;';
+  const span = document.createElement('span');
+  span.textContent = text;
+  span.style.flex = '1';
+  const dismiss = document.createElement('button');
+  dismiss.textContent = 'x';
+  dismiss.style.cssText = 'background:none;color:var(--text-bright);border:none;padding:0 4px;cursor:pointer;font-size:16px;opacity:0.7;margin-left:12px;';
+  dismiss.addEventListener('click', () => _dismissNotice(bar));
+  const progress = document.createElement('div');
+  progress.style.cssText = 'position:absolute;bottom:0;left:0;height:3px;background:rgba(0,0,0,0.3);transition:width linear;';
+  progress.style.width = '100%';
+  bar.appendChild(span);
+  bar.appendChild(dismiss);
+  bar.appendChild(progress);
+  document.body.prepend(bar);
+  _noticeStack.push(bar);
+  requestAnimationFrame(() => {
+    bar.style.transform = 'translateY(0)';
+    _reflowNotices();
+    progress.style.transitionDuration = duration + 'ms';
+    progress.style.width = '0%';
+  });
+  bar._timeout = setTimeout(() => _dismissNotice(bar), duration);
+}
+function _dismissNotice(bar) {
+  if (bar._dismissed) return;
+  bar._dismissed = true;
+  clearTimeout(bar._timeout);
+  _noticeStack = _noticeStack.filter(b => b !== bar);
+  bar.style.transform = 'translateY(-100%)';
+  setTimeout(() => { bar.remove(); _reflowNotices(); }, 200);
 }
 
 async function reloadAllState() {
